@@ -47,12 +47,30 @@ Version 2.0 6/2012 MDG
 const int RED_PIN = 9;
 const int GREEN_PIN = 10;
 const int BLUE_PIN = 11;
+const int SENSOR_PIN = 0; 
 
 // This variable controls how fast we loop through the colors.
 // (Try changing this to make the fading faster or slower.)
 
 int DISPLAY_TIME = 10;  // In milliseconds. Delay for 10 ms (1/100th of a second)
 
+int lastDisplayTime = 0; // used to track the last display time reported to the log
+
+
+// called to setup the waiting time on each color. 
+int displayTime(){
+//  return DISPLAY_TIME; 
+  DISPLAY_TIME = analogRead(SENSOR_PIN); 
+  
+  // the potentiometer might slightly vary between two values, so 
+  // we check a different big enough to display in the log. 
+  if ( abs(DISPLAY_TIME - lastDisplayTime) >5 ) {
+     Serial.print("New display time = ");
+     Serial.println(DISPLAY_TIME ); 
+     lastDisplayTime = DISPLAY_TIME; 
+  }
+  return DISPLAY_TIME;
+}
 
 void setup()
 {
@@ -62,6 +80,8 @@ void setup()
   pinMode(RED_PIN, OUTPUT);
   pinMode(GREEN_PIN, OUTPUT);
   pinMode(BLUE_PIN, OUTPUT);
+  
+  Serial.begin(9600); // sets up the communication to the conso
 }
 
 
@@ -83,6 +103,7 @@ void loop()
   // function here (telling it to run). The actual function code
   // is further down in the sketch.
 
+  Serial.println("Main colors" ); 
   mainColors();
   
   // The above function turns the individual LEDs full-on and
@@ -241,13 +262,24 @@ void showSpectrum()
   // "statement", which in this case is everything within
   // the following brackets {} )
 
+  Serial.println("Show RGB" ); 
   for (x = 0; x < 768; x++)
 
   // Each time we loop (with a new value of x), do the following:
 
   {
     showRGB(x);  // Call RGBspectrum() with our new x
-    delay(DISPLAY_TIME);   
+    delay(displayTime());   // Delay for the delay time obtained from the potentiometer
+  }
+  
+  Serial.print("Show RGB extended. Bits per component: " ); 
+  int bitspercomponent = 5; // you can play with this to see more/less colors, the range is between 1 and 8 (inclusive).
+  Serial.println(bitspercomponent); 
+  for (x = 0; x < pow(2, bitspercomponent*3) ; x++)
+  // Each time we loop (with a new value of x), do the following:
+  {
+    showRGBExtended(x, bitspercomponent);  // Call RGBspectrumExteneded() with our new x
+    delay(displayTime());   // Delay for the delay time obtained from the potentiometer
   }
 }
 
@@ -307,6 +339,41 @@ void showRGB(int color)
     greenIntensity = 0;                   // green is always off
     blueIntensity = 255 - (color - 512);  // blue on to off
   }
+
+  // Now that the brightness values have been set, command the LED
+  // to those values
+
+  analogWrite(RED_PIN, redIntensity);
+  analogWrite(BLUE_PIN, blueIntensity);
+  analogWrite(GREEN_PIN, greenIntensity);
+}
+
+
+/// Extending the logic to use bitwise operations to display colors
+/// from a 2^12. In showRGB the three components are never light up 
+/// simulatenously. In this function we do what that option.
+/// Also, it can be easily expanded to display a bigger spectrum, 
+/// in theory the Arduino should be able to display 255*255*255 colors (16millions).
+void showRGBExtended(int color, int bitspercomponent)
+{
+  int redIntensity;
+  int greenIntensity;
+  int blueIntensity;
+
+  int mask = pow(2,bitspercomponent) -1; 
+  int factor = 255 / mask;
+  // In each of these zones, we'll calculate the brightness
+  // for each of the red, green, and blue LEDs within the RGB LED.
+  // Color is between 0..pow(2, 3*bitspercomponent)-1), 
+  // if bitspercomponent =4 -> (0000 0000 0000 to 1111 1111 1111).
+  // so each component RGB goes from 0000 to 1111 (0... 15). 
+  redIntensity = color & mask ;
+  greenIntensity = (color >> bitspercomponent )  & mask;
+  blueIntensity =  (color >> bitspercomponent*2)  & mask ;
+  
+  redIntensity *= factor;
+  greenIntensity *= factor;
+  blueIntensity *= factor;
 
   // Now that the brightness values have been set, command the LED
   // to those values
